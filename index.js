@@ -1,12 +1,37 @@
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
+const jwt = require('jsonwebtoken')
+const cookieParser = require('cookie-parser')
 const app = express()
 const port = process.env.PORT || 5000
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
-app.use(cors())
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+}))
 app.use(express.json())
+app.use(cookieParser())
+
+const verifyToken = (req, res, next) =>{
+    const token = req.cookies?.token || req.headers.Authorization
+    console.log(req)
+    if(!token){
+        return res.status(401).send({message: 'unauthorized access'})
+    }
+
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (
+        err, decoded
+    ) =>{
+        if(err){
+            return res.status(403).send({message: 'unauthorized access to'})
+        }
+        req.user = decoded
+        next()
+    })
+    console.log('token inside the verifyToken', token)
+}
 
 
 
@@ -23,14 +48,79 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
+    const db = client.db('parcelTime')
+    const userCollection = db.collection('parcels')
+    const bookCollection = db.collection('books')
+
+    //save or update user in db
+    app.post('/users/:email', async(req, res) =>{
+        const email = req.params.email
+        const user = req.body
+        const query = { email }
+        // console.log(user)
+        //check if user exits in db
+        const isExist = await userCollection.findOne(query)
+        if(isExist){
+            return res.send(isExist)
+        }
+        const result = await userCollection.insertOne({...user,
+            role: 'customer',
+            timestamp: Date.now(),})
+        res.send(result)
+    })
+
+    //auth related apis
+    app.post('/jwt', (req, res) =>{
+        const user = req.body
+        const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+            expiresIn: '12h'
+        })
+
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV=='production' ?
+            'none':'strict'
+        })
+        .send({ success: true, token})
+    })
+
+    app.get('/logout', (req, res) =>{
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV=='production' ?
+            'none':'strict'
+        })
+        .send({ success: true})
+    })
+
+    app.post('/books', async(req, res) =>{
+        const book = req.body
+        const result = await bookCollection.insertOne({...book, 
+            status: 'pending',})
+        res.send(result)
+    })
+    
+    app.get('/books/:email', async(req, res) =>{
+        const email = req.params.email
+        const query = { email : email}
+        const result = await bookCollection.find(query).toArray()
+        res.send(result)
+    })
+    
+    app.get('/books', async(req, res) =>{
+        const result = await bookCollection.find().toArray()
+        res.send(result)
+    })
+    
     await client.connect();
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    // await client.close();
   }
 }
 run().catch(console.dir);
