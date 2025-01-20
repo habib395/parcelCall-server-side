@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const app = express();
 const port = process.env.PORT || 5000;
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(
   cors({
@@ -160,6 +160,38 @@ async function run() {
       const result = await bookCollection.find().toArray();
       res.send(result);
     });
+
+    //update related issues
+    app.get('/books/:email/:id', async(req, res) =>{
+        const id = req.params.id
+        const query = { _id: new ObjectId(id)}
+        const result = await bookCollection.findOne(query)
+        res.send(result)
+    })
+
+    app.put('/books/:id', async(req, res) =>{
+      const id = req.params.id
+      const filter = {_id: new ObjectId(id)}
+      const options = {upsert: true}
+      const updateBooks = req.body
+      const books = {
+        $set: {
+          name: updateBooks.name,
+          email: updateBooks.email,
+          phone: updateBooks.phone,
+          type: updateBooks.type,
+          weight: updateBooks.weight,
+          rename: updateBooks.rename,
+          rePhone: updateBooks.rePhone,
+          delivery: updateBooks.delivery,
+          date: updateBooks.date,
+          latitude: updateBooks.latitude,
+          longitude: updateBooks.longitude
+        } 
+      }
+      const result = await bookCollection.updateOne(filter, books, options)
+      res.send(result)
+    })
 
     await client.connect();
     // Send a ping to confirm a successful connection
