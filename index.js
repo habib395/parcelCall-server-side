@@ -75,6 +75,17 @@ async function run() {
       res.send(result);
     });
 
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.user?.email;
+      const query = { email };
+      const result = await bookCollection.findOne(query);
+      if (!result || result?.role !== "admin")
+        return res
+          .status(403)
+          .send({ message: "Forbidden Access! Admin Only Actions!" });
+      next();
+    };
+
     //get all user data
     app.get("/users/:email", async (req, res) => {
       const email = req.params.email;
@@ -85,10 +96,8 @@ async function run() {
       res.send(result);
     });
 
-   
-
     //all delivery man
-    app.get("/users/:role", async (req, res) => {
+    app.get("/users/delivery/:role", async (req, res) => {
       const role = req.params.role;
       const query = { role: role };
       const user = await userCollection.find(query).toArray();
@@ -102,17 +111,27 @@ async function run() {
     });
 
     //update user role and status
-    app.patch('/user/role/:email', async(req, res) =>{
-        const email = req.params.email
-        const { role } = req.body
-        const filter = { email }
-        const updateDoc = {
-            $set: { role, status: 'Verified'},
-        }
-        const result = await userCollection.updateOne(filter, updateDoc)
-        res.send(result)
-    })
+    app.patch("/user/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const { role } = req.body;
+      const filter = { email };
+      const updateDoc = {
+        $set: { role, status: "Verified" },
+      };
+      const result = await userCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
+    app.patch('/book/status/:email', async(req, res) =>{
+      const email = req.params.email 
+      const { status } = req.body
+      const filter = { email }
+      const updateDoc = {
+        $set: { status },
+      }
+      const result = await bookCollection.updateOne(filter, updateDoc)
+      res.send(result)
+    })
 
     //auth related apis
     app.post("/jwt", (req, res) => {
@@ -162,18 +181,18 @@ async function run() {
     });
 
     //update related issues
-    app.get('/books/:email/:id', async(req, res) =>{
-        const id = req.params.id
-        const query = { _id: new ObjectId(id)}
-        const result = await bookCollection.findOne(query)
-        res.send(result)
-    })
+    app.get("/books/:email/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookCollection.findOne(query);
+      res.send(result);
+    });
 
-    app.put('/books/:id', async(req, res) =>{
-      const id = req.params.id
-      const filter = {_id: new ObjectId(id)}
-      const options = {upsert: true}
-      const updateBooks = req.body
+    app.put("/books/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updateBooks = req.body;
       const books = {
         $set: {
           name: updateBooks.name,
@@ -186,12 +205,26 @@ async function run() {
           delivery: updateBooks.delivery,
           date: updateBooks.date,
           latitude: updateBooks.latitude,
-          longitude: updateBooks.longitude
-        } 
-      }
-      const result = await bookCollection.updateOne(filter, books, options)
-      res.send(result)
-    })
+          longitude: updateBooks.longitude,
+        },
+      };
+      const result = await bookCollection.updateOne(filter, books, options);
+      res.send(result);
+    });
+
+    // app.get('/admin-stat', async(req, res) =>{
+    //   const Booking = await bookCollection.estimatedDocumentCount()
+    //   const users = await userCollection.estimatedDocumentCount()
+
+      
+    // })
+
+    app.delete("/books/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookCollection.deleteOne(query);
+      res.send(result);
+    });
 
     await client.connect();
     // Send a ping to confirm a successful connection
