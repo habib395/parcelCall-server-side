@@ -148,12 +148,14 @@ async function run() {
         $set: {
           status,
           deliveryManId,
-          approximateDeliveryDate,
+          // approximateDeliveryDate,
+          approximateDeliveryDate: approximateDeliveryDate? approximateDeliveryDate : new Date().toDateString()
         }
       }
       const result = await bookCollection.updateOne(filter, updateDoc)
       res.send(result)
     })
+
 
     app.patch('/parcel/status/:id', async(req, res) =>{
       const id = new ObjectId(req.params.id)
