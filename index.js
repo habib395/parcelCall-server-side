@@ -86,6 +86,21 @@ async function run() {
       next();
     };
 
+    app.get('/userId/:email', async(req, res) =>{
+      try{
+        const email = req.params.email 
+        const user = await userCollection.findOne({ email })
+        if(!user){
+          return res.status(404).send({ message: "User not found"})
+        }
+        const numericId = user._id.toString()
+        res.send({ _id: numericId })
+      }catch(error){
+        console.error("Error fetching user:", error)
+        res.status(500).send({ message: "Internal server error"})
+      }
+    })
+
     //get all user data
     app.get("/users/:email", async (req, res) => {
       const email = req.params.email;
@@ -122,15 +137,52 @@ async function run() {
       res.send(result);
     });
 
-    app.patch('/book/status/:email', async(req, res) =>{
-      const email = req.params.email 
-      const { status } = req.body
-      const filter = { email }
+   
+
+    app.patch('/book/status/:id', async(req, res) =>{
+      const id = new ObjectId(req.params.id)
+      const { status, deliveryManId, approximateDeliveryDate } = req.body
+
+      const filter = { _id: id }
       const updateDoc = {
-        $set: { status },
+        $set: {
+          status,
+          deliveryManId,
+          approximateDeliveryDate,
+        }
       }
       const result = await bookCollection.updateOne(filter, updateDoc)
       res.send(result)
+    })
+
+    app.patch('/parcel/status/:id', async(req, res) =>{
+      const id = new ObjectId(req.params.id)
+      const { status } = req.body
+
+      const filter = { _id: id }
+      const updateDoc = { $set: { status }}
+
+      const result = await userCollection.updateOne(filter, updateDoc)
+      res.send(result)
+    })
+
+    app.get('/parcel/deliveryMan/:userId', async(req, res) =>{
+      const userId = req.params.userId
+      try{
+        const result = await bookCollection.find({ deliveryManId: userId}).toArray()
+        if(result.length > 0){
+          res.status(200).json({
+            message: `Parcel for delivery man with ID: ${userId}`,
+            data: result
+          })
+        }else{
+          res.status(404).json({message: 'No parcels found for this delivery man'})
+        }
+      }
+      catch(error){
+        console.error('Error fetching parcels', error)
+        res.status(500).json({ message: "Internal Server Error"})
+      }
     })
 
     //auth related apis
@@ -164,6 +216,7 @@ async function run() {
       const result = await bookCollection.insertOne({
         ...book,
         status: "pending",
+        deliveryManId: book.deliveryManId,
       });
       res.send(result);
     });
