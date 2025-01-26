@@ -71,6 +71,28 @@ async function run() {
     });
 
     app.get("/users", async (req, res) => {
+      // try{
+      //   const users = await userCollection.find().toArray()
+      //   const userStats = []
+      //   for(const user of users){
+      //     const userEmail = user.email
+      //     const userParcels = await bookCollection.find({ email: userEmail}).toArray()
+      //     const totalSpent = userParcels.reduce((acc, parcel) => acc + parcel.price, 0)
+
+      //     userStats.push({
+      //       name: user.name,
+      //       phone: user.phone,
+      //       parcelsDelivered: userParcels.length,
+      //       totalSpentAmount: totalSpent ,
+      //       role: user.role,
+      //       _id: user._id.toString()
+      //     })
+      //   }
+      //   res.send(userStats)
+      // }catch(error){
+      //   console.error("Error fetching users:", error)
+      //   res.status(500).send({ message: "Internal server Error"})
+      // }
       const result = await userCollection.find().toArray();
       res.send(result);
     });
@@ -102,14 +124,44 @@ async function run() {
     })
 
     //get all user data
+    // app.get("/users/:email", async (req, res) => {
+    //   const email = req.params.email;
+    //   const query = { email: { $ne: email } };
+    //   console.log("Email to exclude:", email);
+    //   console.log("Query used:", query);
+    //   const result = await userCollection.find(query).toArray();
+    //   res.send(result);
+    // });
     app.get("/users/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { email: { $ne: email } };
-      console.log("Email to exclude:", email);
-      console.log("Query used:", query);
-      const result = await userCollection.find(query).toArray();
-      res.send(result);
+      try {
+        const email = req.params.email;
+        const query = { email: { $ne: email } }; // Exclude the user with the given email
+        const users = await userCollection.find(query).toArray();
+    
+        const userStats = [];
+    
+        for (const user of users) {
+          const userEmail = user.email;
+          const userParcels = await bookCollection.find({ email: userEmail }).toArray();
+          const totalSpent = userParcels.reduce((acc, parcel) => acc + parcel.price, 0);
+    
+          userStats.push({
+            name: user.name,
+            phone: user.phone,
+            parcelsDelivered: userParcels.length,
+            totalSpentAmount: totalSpent,
+            role: user.role,
+            _id: user._id.toString(),
+          });
+        }
+    
+        res.send(userStats);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
     });
+    
 
     //all delivery man
     app.get("/users/delivery/:role", async (req, res) => {
@@ -133,8 +185,13 @@ async function run() {
       const updateDoc = {
         $set: { role, status: "Verified" },
       };
-      const result = await userCollection.updateOne(filter, updateDoc);
+      try{
+        const result = await userCollection.updateOne(filter, updateDoc);
       res.send(result);
+      }catch(error){
+        console.error("Error updating user role:", error)
+        res.status(500).send({ message: "Internal Server Error"})
+      }
     });
 
    
@@ -218,7 +275,8 @@ async function run() {
       const result = await bookCollection.insertOne({
         ...book,
         status: "pending",
-        deliveryManId: book.deliveryManId,
+        // createAt: new Date().toISOString()
+        // deliveryManId: book.deliveryManId,
       });
       res.send(result);
     });
@@ -235,6 +293,30 @@ async function run() {
       res.send(result);
     });
 
+
+    app.get('/parcels', async(req, res) =>{
+      const { status, deliveryManId, fromDate, toDate} = req.query
+      const query = {}
+      if(status){
+        query.status = status
+      }
+      if(deliveryManId){
+        query.deliveryManId = deliveryManId
+      }
+      if(fromDate && toDate){
+        query.approximateDeliveryDate = { 
+          $gte: new Date(fromDate),
+          $lte: new Date(toDate),
+        }
+      }
+      try{
+        const result = await bookCollection.find(query).toArray()
+        res.status(200).send(result)
+      }catch(error){
+        console.error("Error fetching parcels:", error)
+        res.status(500).send({ message: "Internal Server Error"})
+      }
+    })
     //update related issues
     app.get("/books/:email/:id", async (req, res) => {
       const id = req.params.id;
