@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -81,18 +82,38 @@ async function run() {
       }
     });
 
+    app.post("/createPaymentIntent", async (req, res) => {
+      const { parcelId } = req.body;
+
+      // Example: Fetch the price from the database
+      const parcel = await Parcel.findById(parcelId);
+      const price = parcel.price; // Assuming the parcel has a `price` field
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: price * 100, // Convert to cents
+        currency: "usd",
+      });
+
+      res.send({ clientSecret: paymentIntent.client_secret });
+    });
+
+    app.post("/confirm-payment", async (rea, res) => {
+      const { paymentIntentId, parcelId } = req.body;
+      await Parcel.findByIdAndUpdate(parcelId, { status: "Paid" });
+      res.send({ success: true });
+    });
 
     app.get("/review/:deliveryManId", async (req, res) => {
-      const { deliveryManId } = req.params; 
+      const { deliveryManId } = req.params;
 
       try {
         const reviews = await reviewCollection
           .find({ deliveryManId })
-          .toArray(); 
+          .toArray();
         if (reviews.length === 0) {
           return res
             .status(404)
-            .json({ message: "No reviews found for this delivery man" }); 
+            .json({ message: "No reviews found for this delivery man" });
         }
         res.json(reviews);
       } catch (error) {
@@ -168,35 +189,39 @@ async function run() {
       }
     });
 
-    app.get('/adminStat', async(req, res) => {
-      const parcelBooked = await bookCollection.estimatedDocumentCount()
-      const parcelDelivered = await bookCollection.countDocuments({ status: 'Delivered' })
-      const TotalUser = await userCollection.estimatedDocumentCount()
-      res.send({ parcelBooked, parcelDelivered, TotalUser })
-    })
+    app.get("/adminStat", async (req, res) => {
+      const parcelBooked = await bookCollection.estimatedDocumentCount();
+      const parcelDelivered = await bookCollection.countDocuments({
+        status: "Delivered",
+      });
+      const TotalUser = await userCollection.estimatedDocumentCount();
+      res.send({ parcelBooked, parcelDelivered, TotalUser });
+    });
 
     app.get("/users/delivery/:role", async (req, res) => {
       try {
         const role = req.params.role;
         const query = { role };
         const users = await userCollection.find(query).toArray();
-    
+
         const deliveryStats = [];
-    
+
         for (const user of users) {
           const deliveryManId = user._id.toString();
-    
+
           const parcelsDelivered = await bookCollection.countDocuments({
             deliveryManId,
             status: "Delivered",
           });
-    
+
           const parcels = await bookCollection
             .find({ deliveryManId })
             .toArray();
-    
-          const reviews = await reviewCollection.find({ deliveryManId }).toArray();
-    
+
+          const reviews = await reviewCollection
+            .find({ deliveryManId })
+            .toArray();
+
           const totalReviews = reviews.reduce(
             (acc, review) => acc + (review.rating || 0),
             0
@@ -204,7 +229,7 @@ async function run() {
           const averageReview = reviews.length
             ? (totalReviews / reviews.length).toFixed(2)
             : "No reviews";
-    
+
           deliveryStats.push({
             name: user.name,
             phone: user.phone,
@@ -214,13 +239,13 @@ async function run() {
             _id: user._id.toString(),
           });
         }
-    
+
         res.send(deliveryStats);
       } catch (error) {
         console.error("Error fetching delivery men:", error);
         res.status(500).send({ message: "Internal server error" });
       }
-    }); 
+    });
 
     app.get("/users/role/:email", async (req, res) => {
       const email = req.params.email;
@@ -228,11 +253,11 @@ async function run() {
       res.send({ role: result?.role });
     });
 
-    app.get("/user/id/:email", async(req, res) =>{
-      const email = req.params.email
-      const result = await userCollection.findOne({ email })
-      res.send({ id: result?._id})
-    })
+    app.get("/user/id/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await userCollection.findOne({ email });
+      res.send({ id: result?._id });
+    });
 
     //update user role and status
     app.patch("/user/role/:email", async (req, res) => {
@@ -407,20 +432,24 @@ async function run() {
 
     app.get("/topDeliveryMen", async (req, res) => {
       try {
-        const users = await userCollection.find({ role: "deliveryMan" }).toArray();
-    
+        const users = await userCollection
+          .find({ role: "deliveryMan" })
+          .toArray();
+
         const deliveryStats = [];
-    
+
         for (const user of users) {
           const deliveryManId = user._id.toString();
-    
+
           const parcelsDelivered = await bookCollection.countDocuments({
             deliveryManId,
             status: "Delivered",
           });
-    
-          const reviews = await reviewCollection.find({ deliveryManId }).toArray();
-    
+
+          const reviews = await reviewCollection
+            .find({ deliveryManId })
+            .toArray();
+
           const totalReviews = reviews.reduce(
             (acc, review) => acc + (review.rating || 0),
             0
@@ -428,17 +457,18 @@ async function run() {
           const averageReview = reviews.length
             ? (totalReviews / reviews.length).toFixed(2)
             : "No reviews";
-    
+
           deliveryStats.push({
             name: user.name,
             phone: user.phone,
             parcelsDelivered,
-            averageReview: averageReview === "No reviews" ? 0 : parseFloat(averageReview),
+            averageReview:
+              averageReview === "No reviews" ? 0 : parseFloat(averageReview),
             image: user.image || "https://via.placeholder.com/150", // Default image
             _id: user._id.toString(),
           });
         }
-    
+
         // Sort by parcels delivered (desc), then average rating (desc)
         const topDeliveryMen = deliveryStats
           .sort((a, b) =>
@@ -447,14 +477,13 @@ async function run() {
               : b.averageReview - a.averageReview
           )
           .slice(0, 3); // Get top 3 delivery men
-    
+
         res.send(topDeliveryMen);
       } catch (error) {
         console.error("Error fetching top delivery men:", error);
         res.status(500).send({ message: "Internal server error" });
       }
     });
-    
 
     app.get("/adminStatistic", async (req, res) => {
       try {
@@ -462,7 +491,7 @@ async function run() {
           .aggregate([
             {
               $addFields: {
-                date: { $toDate: "$date" }, 
+                date: { $toDate: "$date" },
               },
             },
             {
@@ -479,7 +508,7 @@ async function run() {
           .aggregate([
             {
               $addFields: {
-                date: { $toDate: "$date" }, 
+                date: { $toDate: "$date" },
               },
             },
             {
@@ -514,7 +543,7 @@ async function run() {
     });
 
     await client.connect();
-    
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
