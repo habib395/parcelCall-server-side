@@ -35,7 +35,6 @@ const verifyToken = (req, res, next) => {
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6aryg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -49,14 +48,13 @@ async function run() {
     const db = client.db("parcelTime");
     const userCollection = db.collection("parcels");
     const bookCollection = db.collection("books");
+    const reviewCollection = db.collection("reviews");
 
-    //save or update user in db
     app.post("/users/:email", async (req, res) => {
       const email = req.params.email;
       const user = req.body;
       const query = { email };
-      console.log(user);
-      //check if user exits in db
+      // console.log(user);
       const isExist = await userCollection.findOne(query);
       if (isExist) {
         return res.send(isExist);
@@ -70,29 +68,40 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
-      // try{
-      //   const users = await userCollection.find().toArray()
-      //   const userStats = []
-      //   for(const user of users){
-      //     const userEmail = user.email
-      //     const userParcels = await bookCollection.find({ email: userEmail}).toArray()
-      //     const totalSpent = userParcels.reduce((acc, parcel) => acc + parcel.price, 0)
+    app.post("/review", async (req, res) => {
+      const review = req.body;
+      try {
+        const result = await reviewCollection.insertOne(review);
+        res.send({ success: true, result });
+      } catch (error) {
+        console.error(error);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to submit review" });
+      }
+    });
 
-      //     userStats.push({
-      //       name: user.name,
-      //       phone: user.phone,
-      //       parcelsDelivered: userParcels.length,
-      //       totalSpentAmount: totalSpent ,
-      //       role: user.role,
-      //       _id: user._id.toString()
-      //     })
-      //   }
-      //   res.send(userStats)
-      // }catch(error){
-      //   console.error("Error fetching users:", error)
-      //   res.status(500).send({ message: "Internal server Error"})
-      // }
+
+    app.get("/review/:deliveryManId", async (req, res) => {
+      const { deliveryManId } = req.params; 
+
+      try {
+        const reviews = await reviewCollection
+          .find({ deliveryManId })
+          .toArray(); 
+        if (reviews.length === 0) {
+          return res
+            .status(404)
+            .json({ message: "No reviews found for this delivery man" }); 
+        }
+        res.json(reviews);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to fetch reviews" });
+      }
+    });
+
+    app.get("/users", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
@@ -108,43 +117,39 @@ async function run() {
       next();
     };
 
-    app.get('/userId/:email', async(req, res) =>{
-      try{
-        const email = req.params.email 
-        const user = await userCollection.findOne({ email })
-        if(!user){
-          return res.status(404).send({ message: "User not found"})
+    app.get("/userId/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await userCollection.findOne({ email });
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
         }
-        const numericId = user._id.toString()
-        res.send({ _id: numericId })
-      }catch(error){
-        console.error("Error fetching user:", error)
-        res.status(500).send({ message: "Internal server error"})
+        const numericId = user._id.toString();
+        res.send({ _id: numericId });
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ message: "Internal server error" });
       }
-    })
+    });
 
-    //get all user data
-    // app.get("/users/:email", async (req, res) => {
-    //   const email = req.params.email;
-    //   const query = { email: { $ne: email } };
-    //   console.log("Email to exclude:", email);
-    //   console.log("Query used:", query);
-    //   const result = await userCollection.find(query).toArray();
-    //   res.send(result);
-    // });
     app.get("/users/:email", async (req, res) => {
       try {
         const email = req.params.email;
-        const query = { email: { $ne: email } }; // Exclude the user with the given email
+        const query = { email: { $ne: email } };
         const users = await userCollection.find(query).toArray();
-    
+
         const userStats = [];
-    
+
         for (const user of users) {
           const userEmail = user.email;
-          const userParcels = await bookCollection.find({ email: userEmail }).toArray();
-          const totalSpent = userParcels.reduce((acc, parcel) => acc + parcel.price, 0);
-    
+          const userParcels = await bookCollection
+            .find({ email: userEmail })
+            .toArray();
+          const totalSpent = userParcels.reduce(
+            (acc, parcel) => acc + parcel.price,
+            0
+          );
+
           userStats.push({
             name: user.name,
             phone: user.phone,
@@ -152,30 +157,82 @@ async function run() {
             totalSpentAmount: totalSpent,
             role: user.role,
             _id: user._id.toString(),
+            email: user.email,
           });
         }
-    
+
         res.send(userStats);
       } catch (error) {
         console.error("Error fetching users:", error);
         res.status(500).send({ message: "Internal server error" });
       }
     });
-    
 
-    //all delivery man
+    app.get('/adminStat', async(req, res) => {
+      const parcelBooked = await bookCollection.estimatedDocumentCount()
+      const parcelDelivered = await bookCollection.countDocuments({ status: 'Delivered' })
+      const TotalUser = await userCollection.estimatedDocumentCount()
+      res.send({ parcelBooked, parcelDelivered, TotalUser })
+    })
+
     app.get("/users/delivery/:role", async (req, res) => {
-      const role = req.params.role;
-      const query = { role: role };
-      const user = await userCollection.find(query).toArray();
-      res.send(user);
-    });
+      try {
+        const role = req.params.role;
+        const query = { role };
+        const users = await userCollection.find(query).toArray();
+    
+        const deliveryStats = [];
+    
+        for (const user of users) {
+          const deliveryManId = user._id.toString();
+    
+          const parcelsDelivered = await bookCollection.countDocuments({
+            deliveryManId,
+            status: "Delivered",
+          });
+    
+          const parcels = await bookCollection
+            .find({ deliveryManId })
+            .toArray();
+    
+          const reviews = await reviewCollection.find({ deliveryManId }).toArray();
+    
+          const totalReviews = reviews.reduce(
+            (acc, review) => acc + (review.rating || 0),
+            0
+          );
+          const averageReview = reviews.length
+            ? (totalReviews / reviews.length).toFixed(2)
+            : "No reviews";
+    
+          deliveryStats.push({
+            name: user.name,
+            phone: user.phone,
+            parcelsDelivered,
+            email: user.email,
+            averageReview,
+            _id: user._id.toString(),
+          });
+        }
+    
+        res.send(deliveryStats);
+      } catch (error) {
+        console.error("Error fetching delivery men:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    }); 
 
     app.get("/users/role/:email", async (req, res) => {
       const email = req.params.email;
       const result = await userCollection.findOne({ email });
       res.send({ role: result?.role });
     });
+
+    app.get("/user/id/:email", async(req, res) =>{
+      const email = req.params.email
+      const result = await userCollection.findOne({ email })
+      res.send({ id: result?._id})
+    })
 
     //update user role and status
     app.patch("/user/role/:email", async (req, res) => {
@@ -185,64 +242,66 @@ async function run() {
       const updateDoc = {
         $set: { role, status: "Verified" },
       };
-      try{
+      try {
         const result = await userCollection.updateOne(filter, updateDoc);
-      res.send(result);
-      }catch(error){
-        console.error("Error updating user role:", error)
-        res.status(500).send({ message: "Internal Server Error"})
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating user role:", error);
+        res.status(500).send({ message: "Internal Server Error" });
       }
     });
 
-   
+    app.patch("/book/status/:id", async (req, res) => {
+      const id = new ObjectId(req.params.id);
+      const { status, deliveryManId, approximateDeliveryDate } = req.body;
 
-    app.patch('/book/status/:id', async(req, res) =>{
-      const id = new ObjectId(req.params.id)
-      const { status, deliveryManId, approximateDeliveryDate } = req.body
-
-      const filter = { _id: id }
+      const filter = { _id: id };
       const updateDoc = {
         $set: {
           status,
           deliveryManId,
           // approximateDeliveryDate,
-          approximateDeliveryDate: approximateDeliveryDate? approximateDeliveryDate : new Date().toDateString()
-        }
-      }
-      const result = await bookCollection.updateOne(filter, updateDoc)
-      res.send(result)
-    })
+          approximateDeliveryDate: approximateDeliveryDate
+            ? approximateDeliveryDate
+            : new Date().toDateString(),
+        },
+      };
+      const result = await bookCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
+    app.patch("/parcel/status/:id", async (req, res) => {
+      const id = new ObjectId(req.params.id);
+      const { status } = req.body;
 
-    app.patch('/parcel/status/:id', async(req, res) =>{
-      const id = new ObjectId(req.params.id)
-      const { status } = req.body
+      const filter = { _id: id };
+      const updateDoc = { $set: { status } };
 
-      const filter = { _id: id }
-      const updateDoc = { $set: { status }}
+      const result = await userCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
-      const result = await userCollection.updateOne(filter, updateDoc)
-      res.send(result)
-    })
-
-    app.get('/parcel/deliveryMan/:userId', async(req, res) =>{
-      const userId = req.params.userId
-      try{
-        const result = await bookCollection.find({ deliveryManId: userId}).toArray()
-        if(result.length > 0){
+    app.get("/parcel/deliveryMan/:userId", async (req, res) => {
+      const userId = req.params.userId;
+      try {
+        const result = await bookCollection
+          .find({ deliveryManId: userId })
+          .toArray();
+        if (result.length > 0) {
           res.status(200).json({
             message: `Parcel for delivery man with ID: ${userId}`,
-            data: result
-          })
-        }else{
-          res.status(404).json({message: 'No parcels found for this delivery man'})
+            data: result,
+          });
+        } else {
+          res
+            .status(404)
+            .json({ message: "No parcels found for this delivery man" });
         }
+      } catch (error) {
+        console.error("Error fetching parcels", error);
+        res.status(500).json({ message: "Internal Server Error" });
       }
-      catch(error){
-        console.error('Error fetching parcels', error)
-        res.status(500).json({ message: "Internal Server Error"})
-      }
-    })
+    });
 
     //auth related apis
     app.post("/jwt", (req, res) => {
@@ -275,8 +334,6 @@ async function run() {
       const result = await bookCollection.insertOne({
         ...book,
         status: "pending",
-        // createAt: new Date().toISOString()
-        // deliveryManId: book.deliveryManId,
       });
       res.send(result);
     });
@@ -293,30 +350,29 @@ async function run() {
       res.send(result);
     });
 
-
-    app.get('/parcels', async(req, res) =>{
-      const { status, deliveryManId, fromDate, toDate} = req.query
-      const query = {}
-      if(status){
-        query.status = status
+    app.get("/parcels", async (req, res) => {
+      const { status, deliveryManId, fromDate, toDate } = req.query;
+      const query = {};
+      if (status) {
+        query.status = status;
       }
-      if(deliveryManId){
-        query.deliveryManId = deliveryManId
+      if (deliveryManId) {
+        query.deliveryManId = deliveryManId;
       }
-      if(fromDate && toDate){
-        query.approximateDeliveryDate = { 
+      if (fromDate && toDate) {
+        query.approximateDeliveryDate = {
           $gte: new Date(fromDate),
           $lte: new Date(toDate),
-        }
+        };
       }
-      try{
-        const result = await bookCollection.find(query).toArray()
-        res.status(200).send(result)
-      }catch(error){
-        console.error("Error fetching parcels:", error)
-        res.status(500).send({ message: "Internal Server Error"})
+      try {
+        const result = await bookCollection.find(query).toArray();
+        res.status(200).send(result);
+      } catch (error) {
+        console.error("Error fetching parcels:", error);
+        res.status(500).send({ message: "Internal Server Error" });
       }
-    })
+    });
     //update related issues
     app.get("/books/:email/:id", async (req, res) => {
       const id = req.params.id;
@@ -349,12 +405,106 @@ async function run() {
       res.send(result);
     });
 
-    // app.get('/admin-stat', async(req, res) =>{
-    //   const Booking = await bookCollection.estimatedDocumentCount()
-    //   const users = await userCollection.estimatedDocumentCount()
+    app.get("/topDeliveryMen", async (req, res) => {
+      try {
+        const users = await userCollection.find({ role: "deliveryMan" }).toArray();
+    
+        const deliveryStats = [];
+    
+        for (const user of users) {
+          const deliveryManId = user._id.toString();
+    
+          const parcelsDelivered = await bookCollection.countDocuments({
+            deliveryManId,
+            status: "Delivered",
+          });
+    
+          const reviews = await reviewCollection.find({ deliveryManId }).toArray();
+    
+          const totalReviews = reviews.reduce(
+            (acc, review) => acc + (review.rating || 0),
+            0
+          );
+          const averageReview = reviews.length
+            ? (totalReviews / reviews.length).toFixed(2)
+            : "No reviews";
+    
+          deliveryStats.push({
+            name: user.name,
+            phone: user.phone,
+            parcelsDelivered,
+            averageReview: averageReview === "No reviews" ? 0 : parseFloat(averageReview),
+            image: user.image || "https://via.placeholder.com/150", // Default image
+            _id: user._id.toString(),
+          });
+        }
+    
+        // Sort by parcels delivered (desc), then average rating (desc)
+        const topDeliveryMen = deliveryStats
+          .sort((a, b) =>
+            b.parcelsDelivered !== a.parcelsDelivered
+              ? b.parcelsDelivered - a.parcelsDelivered
+              : b.averageReview - a.averageReview
+          )
+          .slice(0, 3); // Get top 3 delivery men
+    
+        res.send(topDeliveryMen);
+      } catch (error) {
+        console.error("Error fetching top delivery men:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+    
 
-      
-    // })
+    app.get("/adminStatistic", async (req, res) => {
+      try {
+        const bookingByDate = await bookCollection
+          .aggregate([
+            {
+              $addFields: {
+                date: { $toDate: "$date" }, 
+              },
+            },
+            {
+              $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ])
+          .toArray();
+
+        const bookVsDelivered = await bookCollection
+          .aggregate([
+            {
+              $addFields: {
+                date: { $toDate: "$date" }, 
+              },
+            },
+            {
+              $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                booked: { $sum: 1 },
+                delivered: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0],
+                  },
+                },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ])
+          .toArray();
+
+        res.json({ bookingByDate, bookVsDelivered });
+      } catch (error) {
+        console.error("Error fetching admin statistics:", error);
+        res
+          .status(500)
+          .send({ message: "Internal Server Error", error: error.message });
+      }
+    });
 
     app.delete("/books/:id", async (req, res) => {
       const id = req.params.id;
@@ -364,13 +514,12 @@ async function run() {
     });
 
     await client.connect();
-    // Send a ping to confirm a successful connection
+    
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
   } finally {
-    // Ensures that the client will close when you finish/error
     // await client.close();
   }
 }
