@@ -10,7 +10,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://crabby-square.surge.sh"],
     credentials: true,
   })
 );
@@ -83,25 +83,43 @@ async function run() {
     });
 
     app.post("/createPaymentIntent", async (req, res) => {
-      const { parcelId } = req.body;
-
-      // Example: Fetch the price from the database
-      const parcel = await Parcel.findById(parcelId);
-      const price = parcel.price; // Assuming the parcel has a `price` field
-
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: price * 100, // Convert to cents
-        currency: "usd",
-      });
-
-      res.send({ clientSecret: paymentIntent.client_secret });
+      try {
+        const { parcelId } = req.body;
+    
+        if (!parcelId) {
+          return res.status(400).json({ error: "Parcel ID is required" });
+        }
+    
+        const parcel = await bookCollection.findOne({ parcelId });
+    
+        if (!parcel) {
+          return res.status(404).json({ error: "Parcel not found" });
+        }
+    
+        const price = parcel.price;
+    
+        if (!price || typeof price !== "number") {
+          return res.status(400).json({ error: "Invalid price for the parcel" });
+        }
+    
+       
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(price * 100), 
+          currency: "usd",
+        });
+    
+        res.json({ clientSecret: paymentIntent.client_secret });
+      } catch (error) {
+        console.error("Error creating payment intent:", error);
+        res.status(500).json({ error: "Failed to create payment intent" });
+      }
     });
 
-    app.post("/confirm-payment", async (rea, res) => {
-      const { paymentIntentId, parcelId } = req.body;
-      await Parcel.findByIdAndUpdate(parcelId, { status: "Paid" });
-      res.send({ success: true });
-    });
+    // app.post("/confirm-payment", async (rea, res) => {
+    //   const { paymentIntentId, parcelId } = req.body;
+    //   await Parcel.findByIdAndUpdate(parcelId, { status: "Paid" });
+    //   res.send({ success: true });
+    // });
 
     app.get("/review/:deliveryManId", async (req, res) => {
       const { deliveryManId } = req.params;
@@ -375,6 +393,7 @@ async function run() {
       res.send(result);
     });
 
+
     app.get("/parcels", async (req, res) => {
       const { status, deliveryManId, fromDate, toDate } = req.query;
       const query = {};
@@ -386,8 +405,8 @@ async function run() {
       }
       if (fromDate && toDate) {
         query.approximateDeliveryDate = {
-          $gte: new Date(fromDate),
-          $lte: new Date(toDate),
+          $gte: new Date(fromDate).getTime(),
+          $lte: new Date(toDate).getTime(),
         };
       }
       try {
@@ -398,6 +417,8 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
+
+    
     //update related issues
     app.get("/books/:email/:id", async (req, res) => {
       const id = req.params.id;
@@ -542,12 +563,12 @@ async function run() {
       res.send(result);
     });
 
-    await client.connect();
+    // await client.connect();
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // await client.close();
   }
