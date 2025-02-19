@@ -66,6 +66,7 @@ async function run() {
         status: "null",
         timestamp: Date.now(),
       });
+      P;
       res.send(result);
     });
 
@@ -85,29 +86,30 @@ async function run() {
     app.post("/createPaymentIntent", async (req, res) => {
       try {
         const { parcelId } = req.body;
-    
+
         if (!parcelId) {
           return res.status(400).json({ error: "Parcel ID is required" });
         }
-    
+
         const parcel = await bookCollection.findOne({ parcelId });
-    
+
         if (!parcel) {
           return res.status(404).json({ error: "Parcel not found" });
         }
-    
+
         const price = parcel.price;
-    
+
         if (!price || typeof price !== "number") {
-          return res.status(400).json({ error: "Invalid price for the parcel" });
+          return res
+            .status(400)
+            .json({ error: "Invalid price for the parcel" });
         }
-    
-       
+
         const paymentIntent = await stripe.paymentIntents.create({
-          amount: Math.round(price * 100), 
+          amount: Math.round(price * 100),
           currency: "usd",
         });
-    
+
         res.json({ clientSecret: paymentIntent.client_secret });
       } catch (error) {
         console.error("Error creating payment intent:", error);
@@ -143,6 +145,16 @@ async function run() {
     app.get("/users", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
+    });
+
+    app.get("/reviews", async (req, res) => {
+      try {
+        const result = await reviewCollection.find().limit(10).toArray(); // ✅ Get only first 10 reviews
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching reviews:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     });
 
     const verifyAdmin = async (req, res, next) => {
@@ -393,7 +405,6 @@ async function run() {
       res.send(result);
     });
 
-
     app.get("/parcels", async (req, res) => {
       const { status, deliveryManId, fromDate, toDate } = req.query;
       const query = {};
@@ -418,7 +429,6 @@ async function run() {
       }
     });
 
-    
     //update related issues
     app.get("/books/:email/:id", async (req, res) => {
       const id = req.params.id;
