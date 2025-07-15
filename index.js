@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const app = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 8000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(
@@ -17,22 +17,21 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-const verifyToken = (req, res, next) => {
-  const token = req.cookies?.token || req.headers.Authorization;
-  console.log(req);
-  if (!token) {
-    return res.status(401).send({ message: "unauthorized access" });
-  }
-
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).send({ message: "unauthorized access to" });
-    }
-    req.user = decoded;
-    next();
-  });
-  console.log("token inside the verifyToken", token);
-};
+// const verifyToken = (req, res, next) => {
+//   const token = req.cookies?.token || req.headers.Authorization;
+//   console.log(req);
+//   if (!token) {
+//     return res.status(401).send({ message: "unauthorized access" });
+//   }
+//   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+//     if (err) {
+//       return res.status(403).send({ message: "unauthorized access to" });
+//     }
+//     req.user = decoded;
+//     next();
+//   });
+//   console.log("token inside the verifyToken", token);
+// };
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6aryg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -55,7 +54,6 @@ async function run() {
       const email = req.params.email;
       const user = req.body;
       const query = { email };
-      // console.log(user);
       const isExist = await userCollection.findOne(query);
       if (isExist) {
         return res.send(isExist);
@@ -66,7 +64,6 @@ async function run() {
         status: "null",
         timestamp: Date.now(),
       });
-      P;
       res.send(result);
     });
 
@@ -83,39 +80,39 @@ async function run() {
       }
     });
 
-    app.post("/createPaymentIntent", async (req, res) => {
-      try {
-        const { parcelId } = req.body;
+    // app.post("/createPaymentIntent", async (req, res) => {
+    //   try {
+    //     const { parcelId } = req.body;
 
-        if (!parcelId) {
-          return res.status(400).json({ error: "Parcel ID is required" });
-        }
+    //     if (!parcelId) {
+    //       return res.status(400).json({ error: "Parcel ID is required" });
+    //     }
 
-        const parcel = await bookCollection.findOne({ parcelId });
+    //     const parcel = await bookCollection.findOne({ parcelId });
 
-        if (!parcel) {
-          return res.status(404).json({ error: "Parcel not found" });
-        }
+    //     if (!parcel) {
+    //       return res.status(404).json({ error: "Parcel not found" });
+    //     }
 
-        const price = parcel.price;
+    //     const price = parcel.price;
 
-        if (!price || typeof price !== "number") {
-          return res
-            .status(400)
-            .json({ error: "Invalid price for the parcel" });
-        }
+    //     if (!price || typeof price !== "number") {
+    //       return res
+    //         .status(400)
+    //         .json({ error: "Invalid price for the parcel" });
+    //     }
 
-        const paymentIntent = await stripe.paymentIntents.create({
-          amount: Math.round(price * 100),
-          currency: "usd",
-        });
+    //     const paymentIntent = await stripe.paymentIntents.create({
+    //       amount: Math.round(price * 100),
+    //       currency: "usd",
+    //     });
 
-        res.json({ clientSecret: paymentIntent.client_secret });
-      } catch (error) {
-        console.error("Error creating payment intent:", error);
-        res.status(500).json({ error: "Failed to create payment intent" });
-      }
-    });
+    //     res.json({ clientSecret: paymentIntent.client_secret });
+    //   } catch (error) {
+    //     console.error("Error creating payment intent:", error);
+    //     res.status(500).json({ error: "Failed to create payment intent" });
+    //   }
+    // });
 
     // app.post("/confirm-payment", async (rea, res) => {
     //   const { paymentIntentId, parcelId } = req.body;
@@ -125,7 +122,6 @@ async function run() {
 
     app.get("/review/:deliveryManId", async (req, res) => {
       const { deliveryManId } = req.params;
-
       try {
         const reviews = await reviewCollection
           .find({ deliveryManId })
@@ -149,24 +145,24 @@ async function run() {
 
     app.get("/reviews", async (req, res) => {
       try {
-        const result = await reviewCollection.find().limit(10).toArray(); // ✅ Get only first 10 reviews
-        res.send(result);
+        const result = await reviewCollection.find().limit(10).toArray(); 
+        res.send(result)
       } catch (error) {
         console.error("Error fetching reviews:", error);
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
 
-    const verifyAdmin = async (req, res, next) => {
-      const email = req.user?.email;
-      const query = { email };
-      const result = await bookCollection.findOne(query);
-      if (!result || result?.role !== "admin")
-        return res
-          .status(403)
-          .send({ message: "Forbidden Access! Admin Only Actions!" });
-      next();
-    };
+    // const verifyAdmin = async (req, res, next) => {
+    //   const email = req.user?.email;
+    //   const query = { email };
+    //   const result = await bookCollection.findOne(query);
+    //   if (!result || result?.role !== "admin")
+    //     return res
+    //       .status(403)
+    //       .send({ message: "Forbidden Access! Admin Only Actions!" });
+    //   next();
+    // };
 
     app.get("/userId/:email", async (req, res) => {
       try {
@@ -233,25 +229,19 @@ async function run() {
         const role = req.params.role;
         const query = { role };
         const users = await userCollection.find(query).toArray();
-
         const deliveryStats = [];
-
         for (const user of users) {
           const deliveryManId = user._id.toString();
-
           const parcelsDelivered = await bookCollection.countDocuments({
             deliveryManId,
             status: "Delivered",
           });
-
           const parcels = await bookCollection
             .find({ deliveryManId })
             .toArray();
-
           const reviews = await reviewCollection
             .find({ deliveryManId })
             .toArray();
-
           const totalReviews = reviews.reduce(
             (acc, review) => acc + (review.rating || 0),
             0
@@ -259,7 +249,6 @@ async function run() {
           const averageReview = reviews.length
             ? (totalReviews / reviews.length).toFixed(2)
             : "No reviews";
-
           deliveryStats.push({
             name: user.name,
             phone: user.phone,
@@ -269,7 +258,6 @@ async function run() {
             _id: user._id.toString(),
           });
         }
-
         res.send(deliveryStats);
       } catch (error) {
         console.error("Error fetching delivery men:", error);
@@ -315,7 +303,6 @@ async function run() {
         $set: {
           status,
           deliveryManId,
-          // approximateDeliveryDate,
           approximateDeliveryDate: approximateDeliveryDate
             ? approximateDeliveryDate
             : new Date().toDateString(),
@@ -328,10 +315,8 @@ async function run() {
     app.patch("/parcel/status/:id", async (req, res) => {
       const id = new ObjectId(req.params.id);
       const { status } = req.body;
-
       const filter = { _id: id };
       const updateDoc = { $set: { status } };
-
       const result = await userCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
@@ -359,20 +344,19 @@ async function run() {
     });
 
     //auth related apis
-    app.post("/jwt", (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: "12h",
-      });
-
-      res
-        .cookie("token", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV == "production" ? "none" : "strict",
-        })
-        .send({ success: true, token });
-    });
+    // app.post("/jwt", (req, res) => {
+    //   const user = req.body;
+    //   const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+    //     expiresIn: "12h",
+    //   });
+    //   res
+    //     .cookie("token", token, {
+    //       httpOnly: true,
+    //       secure: process.env.NODE_ENV === "production",
+    //       sameSite: process.env.NODE_ENV == "production" ? "none" : "strict",
+    //     })
+    //     .send({ success: true, token });
+    // });
 
     app.get("/logout", (req, res) => {
       res
@@ -507,8 +491,7 @@ async function run() {
               ? b.parcelsDelivered - a.parcelsDelivered
               : b.averageReview - a.averageReview
           )
-          .slice(0, 3); // Get top 3 delivery men
-
+          .slice(0, 3); 
         res.send(topDeliveryMen);
       } catch (error) {
         console.error("Error fetching top delivery men:", error);
