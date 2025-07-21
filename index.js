@@ -199,7 +199,7 @@ async function run() {
 
           userStats.push({
             name: user.name,
-            phone: user.phone,
+            phone: user.phone, 
             parcelsDelivered: userParcels.length,
             totalSpentAmount: totalSpent,
             role: user.role,
@@ -344,19 +344,19 @@ async function run() {
     });
 
     //auth related apis
-    // app.post("/jwt", (req, res) => {
-    //   const user = req.body;
-    //   const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-    //     expiresIn: "12h",
-    //   });
-    //   res
-    //     .cookie("token", token, {
-    //       httpOnly: true,
-    //       secure: process.env.NODE_ENV === "production",
-    //       sameSite: process.env.NODE_ENV == "production" ? "none" : "strict",
-    //     })
-    //     .send({ success: true, token });
-    // });
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "12h",
+      });
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV == "production" ? "none" : "strict",
+        })
+        .send({ success: true, token });
+    });
 
     app.get("/logout", (req, res) => {
       res
