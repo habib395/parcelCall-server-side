@@ -5,12 +5,12 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const app = express();
-const port = process.env.PORT || 8000;
+const port = process.env.PORT || 8800;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://crabby-square.surge.sh"],
+    origin: ["http://localhost:5173", "https://crabby-square.surge.sh"], 
     credentials: true,
   })
 );
@@ -145,7 +145,7 @@ async function run() {
 
     app.get("/reviews", async (req, res) => {
       try {
-        const result = await reviewCollection.find().limit(10).toArray(); 
+        const result = await reviewCollection.find().limit(8).toArray(); 
         res.send(result)
       } catch (error) {
         console.error("Error fetching reviews:", error);
@@ -573,5 +573,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Parcel man is waiting for you at: ${port}`);
+  console.log(`Parcel man is waiting for you at the port number: ${port}`);
 });
